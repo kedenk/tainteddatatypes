@@ -1,12 +1,8 @@
-#
-# based on TaintedStr by Rahul Gopinath
-# https://github.com/vrthra/taintedstr
-#
 import os
 import datatypes.taintedint as taintint
+from datatypes.instr import Instr
 
 from taintedstr import Op, TaintException
-from instr import Instr
 
 Python_Specific = (os.getenv('PY_OPT') or 'false') in ['true', '1']
 
@@ -21,7 +17,9 @@ class tbytes_iterator():
 
         # calls _tbytes getitem should be _tbytes
         c = self._tbytes[self._bytes_idx]
-        assert type(c) is tbytes
+        # the documentation says, that the result of index access
+        # is an int, not a byte
+        assert type(c) is taintint.tint
         self._bytes_idx += 1
         return c
 
@@ -34,6 +32,15 @@ def subbytes(s, l):
 Comparisons = []
 Ins = 0
 IComparisons = []
+
+
+def reset_comparisons():
+    global Comparisons
+    global IComparisons
+    global Ins
+    Comparisons.clear()
+    IComparisons.clear()
+    Ins = 0
 
 
 class tbytes(bytes):
@@ -59,6 +66,9 @@ class tbytes(bytes):
 
     def __str__(self):
         return bytes.__str__(self)
+
+    def __format__(self, format_spec):
+        return bytes.__format__(self, format_spec)
 
     def untaint(self):
         self._taint = [-1] * len(self)
@@ -121,9 +131,15 @@ class tbytes(bytes):
         if type(item) == slice:
 
             if res:
-                return taintint.tint(res[item.start], self._taint[item.start], self)
+                return tbytes(res, self._taint[item], self)
             else:
-                raise NotImplementedError
+                start = item.start
+                stop = item.stop
+                if start >= len(self) or stop >= len(self):
+                    raise AssertionError("Can't access range [%s,%s] of bytes of length %s" % (start, stop, len(self)))
+
+                else:
+                    raise NotImplementedError
 
         elif type(item) == int:
             if item < 0:
@@ -149,7 +165,7 @@ class tbytes(bytes):
     def x(self, i=0):
         v = self._x(i)
         if v < 0:
-            raise TaintException('Invalid mapped char idx in tstr')
+            raise TaintException('Invalid mapped char idx in tbytes')
         return v
 
     def _x(self, i=0):

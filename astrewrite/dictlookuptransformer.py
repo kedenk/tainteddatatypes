@@ -1,18 +1,35 @@
 import ast
 from typing import Dict
-from astrewrite.nodeprocessors import NameProcessor, AttributeProcessor, CallProcessor, NodeProcessor
+from astrewrite.nodeprocessors import NameProcessor, AttributeProcessor, CallProcessor, NodeProcessor, NumProcessor
 
 nodeProcessors = {
     "Name":         NameProcessor("Name"),
     "Call":         CallProcessor("Call"),
-    "Attribute":    AttributeProcessor("Attribute")
+    "Attribute":    AttributeProcessor("Attribute"),
+    "Num":          NumProcessor("Num")
 }
+
+
+vars = []
+ASSIGNMENTS = {}
+
+def resetTracking():
+    global vars
+    global ASSIGNMENTS
+    vars = []
+    ASSIGNMENTS = {}
+    assert len(ASSIGNMENTS.keys()) == 0
+
+def getAssignments():
+    return ASSIGNMENTS
 
 
 class DictLookupTransformer(ast.NodeTransformer):
 
-    def __init__(self, nodeProcessor: Dict[str, NodeProcessor]):
+    def __init__(self, nodeProcessor: Dict[str, NodeProcessor], assignments):
         self.handler = nodeProcessor
+        self.assignments = assignments
+
         self.IN_KEYWORD = 'in_'
 
     def getHandlerFunc(self, node: ast.AST) -> NodeProcessor:
@@ -30,11 +47,14 @@ class DictLookupTransformer(ast.NodeTransformer):
 
         result = node
         ctx = None
-        while not isinstance(result, str):
+        nodeType = None
+        while not isinstance(result, str) and not isinstance(result, int):
             processor = self.getHandlerFunc(result)
-            result, ctx = processor.process(result)
+            result, ctx, nodeType = processor.process(result)
 
-        return result, ctx
+        if ctx == None:
+            ctx = ast.Load()
+        return str(result), ctx, nodeType
 
     def visit_Compare(self, node):
         """"
@@ -47,8 +67,14 @@ class DictLookupTransformer(ast.NodeTransformer):
         if len(node.ops) > 0 and isinstance(node.ops[0], ast.In):
 
             # get caller and callee
-            caller, callerCtx = self.__getExpr(node.left)
-            callee, calleeCtx = self.__getExpr(node.comparators[0])
+            caller, callerCtx, callerNodeType = self.__getExpr(node.left)
+            if caller in self.assignments or isinstance(callerNodeType, ast.Num):
+                caller = 'tint(' + caller + ')'
+            else:
+                return node
+
+            callee, calleeCtx, calleeNodeType = self.__getExpr(node.comparators[0])
+            callee = callee + '.keys()'
 
             # define attributes of call object
             attr = ast.Attribute(
@@ -69,3 +95,15 @@ class DictLookupTransformer(ast.NodeTransformer):
 
         else:
             return node
+
+
+class AstVisitor(ast.NodeVisitor):
+
+    def visit_Num(self, node):
+        vars.append(node.n)
+
+    def visit_Assign(self, node):
+
+        if isinstance(node.value, ast.Num):
+            identifier = node.targets[0].id
+            ASSIGNMENTS[identifier] = (identifier, node.targets[0].ctx)

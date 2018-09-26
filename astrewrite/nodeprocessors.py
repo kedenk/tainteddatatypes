@@ -16,7 +16,7 @@ class CallProcessor(NodeProcessor):
         super().__init__(nodeName)
 
     def process(self, node: ast.AST):
-        return node.func, None
+        return node.func, None, node
 
 
 class NameProcessor(NodeProcessor):
@@ -25,7 +25,7 @@ class NameProcessor(NodeProcessor):
         super().__init__(nodeName)
 
     def process(self, node: ast.AST):
-        return node.id, node.ctx
+        return node.id, node.ctx, node
 
 
 class AttributeProcessor(NodeProcessor):
@@ -34,4 +34,13 @@ class AttributeProcessor(NodeProcessor):
         super().__init__(nodeName)
 
     def process(self, node: ast.AST):
-        return node.value, node.ctx
+        return node.value, node.ctx, node
+
+
+class NumProcessor(NodeProcessor):
+
+    def __init__(self, nodeName: str):
+        super().__init__(nodeName)
+
+    def process(self, node: ast.AST):
+        return node.n, None, node

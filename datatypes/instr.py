@@ -16,7 +16,7 @@ class Instr:
             return '?'
 
     def opS(self):
-        if not self.opA.has_taint() and type(self.opB) is tbytes:
+        if not self.opA.has_taint() and type(self.opB) is int:
             return (self.opB, self.opA)
         else:
             return (self.opA, self.opB)

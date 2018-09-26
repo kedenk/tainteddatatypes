@@ -1,12 +1,7 @@
-#
-# based on TaintedStr by Rahul Gopinath
-# https://github.com/vrthra/taintedstr
-#
-
 import os
 
+from datatypes.instr import Instr
 from taintedstr import Op, TaintException
-from instr import Instr
 
 Python_Specific = (os.getenv('PY_OPT') or 'false') in ['true', '1']
 
@@ -14,6 +9,15 @@ Python_Specific = (os.getenv('PY_OPT') or 'false') in ['true', '1']
 Comparisons = []
 Ins = 0
 IComparisons = []
+
+
+def reset_comparisons():
+    global Comparisons
+    global IComparisons
+    global Ins
+    Comparisons.clear()
+    IComparisons.clear()
+    Ins = 0
 
 
 class tint(int):
@@ -36,7 +40,7 @@ class tint(int):
         return int.__str__(self)
 
     def untaint(self):
-        self._taint = [-1] * len(self)
+        self._taint = [-1]
         return self
 
     def has_taint(self):
@@ -49,13 +53,9 @@ class tint(int):
 
     def __eq(self, other):
         global Comparisons
-        if Python_Specific:
-            Comparisons.append(Instr(Op.EQ, self, other))
-            IComparisons.append(Ins)
-            return super().__eq__(other)
-
-        else:
-            return super().__eq__(other)
+        Comparisons.append(Instr(Op.EQ, self, other))
+        IComparisons.append(Ins)
+        return super().__eq__(other)
 
     def __ne__(self, other):
         global Ins
@@ -64,14 +64,34 @@ class tint(int):
 
     def __ne(self, other):
         global Comparisons
-        if Python_Specific:
-            Comparisons.append(Instr(Op.NE, self, other))
-            IComparisons.append(Ins)
-            return super().__ne__(other)
-        return not self.__eq(other)
+        Comparisons.append(Instr(Op.NE, self, other))
+        IComparisons.append(Ins)
+        return super().__ne__(other)
 
+    def __hash__(self):
+        res = super().__hash__()
+        return tint(res, taint=self._taint)
+
+    def in_(self, i):
+        global Ins
+        Ins += 1
+        return self.__in_(i)
+
+    def __in_(self, entity):
+        # c in dict.keys()
+        # to
+        # c.in_(dict.keys())
+
+        result = [self.__eq(c) for c in entity]
+        return any(result)
+
+    @classmethod
     def from_bytes(cls, bytes, byteorder, *args, **kwargs) -> int:
         res = super().from_bytes(bytes, byteorder, *args, **kwargs)
+
+        from datatypes.taintedbytes import tbytes
+        if isinstance(bytes, tbytes):
+            return tint(res, [i for i in range(bytes.x(), len(bytes))])
         return tint(res)
 
     def to_bytes(self, length, byteorder, *args, **kwargs) -> bytes:

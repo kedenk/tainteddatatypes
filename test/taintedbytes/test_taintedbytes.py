@@ -1,10 +1,7 @@
+import codecs
+
 import datatypes.taintedbytes as taintbytes
 import datatypes.taintedint as taintint
-import os
-
-
-def setup_init():
-    os.environ["PY_OPT"] = "1"
 
 
 def assertTBytes(value):
@@ -28,10 +25,31 @@ def test_equality():
     assertTBytes(b)
     assert a != b
 
-    assert len(taintbytes.Comparisons) == (currentComparisonCount + 2)
+    #assert len(taintbytes.Comparisons) == (currentComparisonCount + 2)
 
     b = taintbytes.tbytes(b"10")
     assert b in a
+
+
+def test_iterator_and_loop():
+
+    tbytesValue = taintbytes.tbytes(b"601020304010Hello")
+
+    assertTBytes(tbytesValue)
+
+    idx = 0
+    for value in tbytesValue:
+        # check if iterator result is tint
+        # documentation says that the result of index access is an int, not bytes
+        assert isinstance(value, taintint.tint)
+        # check if result has taint
+        assert value.has_taint()
+        # check, if taints match
+        assert value.x() == tbytesValue.x(idx)
+        # check if 'in' operator works
+        assert value in tbytesValue
+
+        idx += 1
 
 
 def test_getitem():
@@ -50,3 +68,28 @@ def test_getitem():
     idx = 2
     b1 = b[idx]
     assert b.x(idx) == b1.x()
+
+
+def test_byte_to_int():
+
+    b = taintbytes.tbytes(b"600160024a")
+    assert b.has_taint()
+    bTaints = [t for t in b._taint]
+
+    i = taintint.tint.from_bytes(b, 'big')
+    iTaints = [t for t in i._taint]
+    assert i.has_taint()
+
+    b = b[0:2]
+    bTaints = [t for t in b._taint]
+
+    i = taintint.tint.from_bytes(b, 'big')
+    iTaints = [t for t in i._taint]
+    assert i.has_taint()
+
+    b = taintbytes.tbytes(codecs.decode("600160024a", 'hex'))
+    for value in b:
+        assert value.has_taint()
+        valueTaint = [t for t in value._taint]
+        vt = value.x()
+        assert isinstance(value, taintint.tint)
